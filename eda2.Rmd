@@ -1,0 +1,184 @@
+---
+title: "Feature Selection"
+author: "Mohanapriya Singaravelu"
+date: "24/04/2022"
+output: html_document
+---
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(mltools)
+library(caret)
+library(caTools)
+library(caretEnsemble)
+```
+
+
+Import the dataset 
+
+```{r}
+df = read.csv("Churn_Modelling.csv")
+head(df)
+glimpse(df)
+notRequired = c(1,2,3)
+df1 = df[-notRequired]
+head(df1)
+
+num_cols <- unlist(lapply(df1, is.numeric))
+numData <- df1[ , num_cols]
+numData = data.frame(numData)
+res = cor(numData)
+res
+```
+
+
+
+```{r}
+
+run_models = function(thres){
+  columns= c("Model.Name","Accuracy") 
+  results = data.frame(matrix(nrow = 0, ncol = length(columns))) 
+  colnames(results) = columns
+  models = c("Logistic Regression", "Bagged Decision Tree", "Random Forest","Boosting", "Stacking")
+  acc = c()
+  acCount = 1 
+  rejected = c()
+  count = 1
+  for (i in 1:nrow(res)){
+   if (abs(res[i,9])<thres){
+    rejected[count] = colnames(res)[i]
+    count = count+1
+    }
+  }
+  dummy <- dummyVars(" ~ .", data=df1)
+  df2 <- data.frame(predict(dummy, newdata=df))
+  colnames(df2)[2] = "France"
+  colnames(df2)[3] = "Germany"
+  colnames(df2)[4] = "Spain"
+  colnames(df2)[5] = "Male"
+  colnames(df2)[6] = "Female"
+  df2$Exited = as.factor(df2$Exited)
+  levels(df2$Exited) <- c("yes", "no")
+  head(df2)
+  #Select columns based on correlation values
+  reject = c()
+  count = 1 
+  for(x in rejected){
+    reject[count] = which(colnames(df2)==x)
+    count = count+1
+  }
+  
+  df2 = df2[-reject]
+  head(df2)
+  #Test train split 
+  
+  set.seed(100)
+  sample <- sample.int(n = nrow(df2), size = floor(.75*nrow(df2)), replace = F)
+  train <- df2[sample, ]
+  test  <- df2[-sample, ]
+  
+  
+  
+  #Base model - logistic regression. 
+  model_glm = glm(Exited ~ . , family="binomial", data = train)
+  
+  #Predictions on the test set
+  y_pred1 = predict(model_glm, newdata = test, type = "response")
+  # Confusion matrix on test set
+  cm = table(test$Exited, y_pred1 >= 0.5)
+  c = data.frame(cm)
+  correct = c$Freq[1] + c$Freq[4]
+  base_acc = correct/nrow(test)
+  acc[acCount] = base_acc
+  acCount = acCount+1
+  
+  set.seed(100)
+
+  control1 <- trainControl(sampling="rose",method="repeatedcv", number=5, repeats=5)
+
+  bagCART_model <- train(Exited ~., data=train, method="treebag", metric="Accuracy", trControl=control1) #treebag denotes bagged decision tree
+
+  #Predictions on the test set
+  y_pred2 = predict(bagCART_model, newdata = test)
+  # Confusion matrix on test set
+  cm1 = table(test$Exited, y_pred2)
+  c1 = data.frame(cm1)
+  correct1 = c1$Freq[1] + c1$Freq[4]
+  acc[acCount] = correct1/nrow(test)
+  acCount = acCount+1
+
+  #random forest
+  set.seed(100)
+  control2 <- trainControl(sampling="rose",method="repeatedcv", number=5, repeats=5)
+
+  rf_model <- train(Exited ~., data=train, method="rf", metric="Accuracy", trControl=control2) #rf denotes random forest
+
+  y_pred3 = predict(rf_model, newdata = test, type = "raw")
+  cm2 = table(test$Exited, y_pred3)
+  c2 = data.frame(cm2)
+  correct2 = c2$Freq[1] + c2$Freq[4]
+  acc[acCount] = correct2/nrow(test)
+  acCount = acCount+1
+  set.seed(100)
+
+  #Stochastic gradient boosting
+  control3 <- trainControl(sampling="rose",method="repeatedcv", number=5, repeats=5)
+
+  gbm_model <- train(Exited ~., data=train, method="gbm", metric="Accuracy", trControl=control3)
+
+  y_pred4 = predict(gbm_model, newdata = test)
+
+  cm3 = table(test$Exited, y_pred4)
+  c3 = data.frame(cm3)
+  correct3 = c3$Freq[1] + c3$Freq[4]
+  correct3
+  acc[acCount] = correct3/nrow(test)
+  acCount = acCount+1
+
+  #stacking
+  set.seed(100)
+
+  control_stacking <- trainControl(method="repeatedcv", number=5, repeats=2, savePredictions=TRUE, classProbs=TRUE)
+  algorithms_to_use <- c('rpart', 'glm', 'knn', 'svmRadial')
+  stacked_models <- caretList(Exited ~., data=df2, trControl=control_stacking, methodList=algorithms_to_use)
+  stacking_results <- resamples(stacked_models)
+  # stack using glm
+  stackControl <- trainControl(method="repeatedcv", number=5, repeats=3, savePredictions=TRUE, classProbs=TRUE)
+  set.seed(100)
+  glm_stack <- caretStack(stacked_models, method="glm", metric="Accuracy", trControl=stackControl)
+  print(glm_stack)
+  acc[acCount] = glm_stack$error$Accuracy
+
+  #results$Accuracy = acc
+
+  #results$Model.Name = models
+  
+  results = data.frame(models,acc)
+  return(results) 
+
+}
+```
+
+
+```{r}
+thresholds = c(0.01, 0.025, 0.05, 0.1)
+
+
+#run_models(0.01)
+
+for( i in thresholds){
+  print("Threshold = ")
+  print(i)
+  result =  run_models(i)
+  print(result)
+
+}
+
+```
+
+
+
+Threshold value of 0.025 gives the highest accuracy of 85.72% when stacking is done. 

@@ -1,0 +1,64 @@
+Plotting results 
+
+
+```{r}
+results_df = read.csv("results.csv")
+results_df
+```
+
+
+
+```{r}
+ ggplot(data = results_df, aes(x = Threshold, y =  Logistic.Regression)) +
+  geom_line(color = "red")+
+  geom_point()
+```
+
+
+
+```{r}
+ ggplot(data = results_df, aes(x = Threshold, y = Bagged.Decision.Tree )) +
+  geom_line(color = "blue")+
+  geom_point()+
+   ylim(0.75,0.85)
+
+```
+
+```{r}
+ ggplot(data = results_df, aes(x = Threshold, y = Random.Forest)) +
+  geom_line(color = "orange")+
+  geom_point()+
+   ylim(0.75,0.85)
+
+```
+
+```{r}
+ ggplot(data = results_df, aes(x = Threshold, y = Boosting)) +
+  geom_line(color = "green")+
+  geom_point()+
+   ylim(0.75,0.85)
+```
+
+
+```{r}
+ggplot(data = results_df, aes(x = Threshold, y = Stacking)) +
+  geom_line(color = "black")+
+  geom_point()+
+   ylim(0.75,0.88)+
+  
+```
+
+
+
+```{r}
+library("reshape2")  
+  
+data <- melt(results_df, id = "Threshold")
+ggplot(data,  aes(x = Threshold, y = value, color = variable)) +  
+  geom_line()+
+  ggtitle("Accuracies of Models")+
+  xlab("Threshold value for correlation")+
+  ylab("Accuracy")
+                    
+```
+
